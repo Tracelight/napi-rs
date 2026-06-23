@@ -72,6 +72,10 @@ dyn-symbols = ["napi-sys/dyn-symbols"]
 # Add a runtime Node version detection
 node_version_detect = []
 tracing = ["dep:tracing"]
+# Enable the generic per-call instrumentation hook for `#[napi(instrument)]` functions.
+# The host supplies the instrumentation impl via `register_call_instrument`; napi stays free of any
+# tracing/telemetry stack and only pulls pin-project-lite for the async wrapper's pin projection.
+instrument = ["dep:pin-project-lite"]
 
 [dependencies]
 bitflags = "2"
@@ -79,6 +83,7 @@ bitflags = "2"
 # path stops emitting unresolved `section$end$__DATA$CTOR` references.
 ctor = { version = "1.0.0", default-features = false }
 nohash-hasher = "0.2.0"
+pin-project-lite = { version = "0.2", optional = true }
 rustc-hash = "2.1.1"
 
 [dependencies.anyhow]

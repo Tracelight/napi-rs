@@ -33,6 +33,7 @@ pub struct NapiFn {
   pub enumerable: bool,
   pub configurable: bool,
   pub catch_unwind: bool,
+  pub instrument: bool,
   pub unsafe_: bool,
   pub register_name: Ident,
   pub no_export: bool,

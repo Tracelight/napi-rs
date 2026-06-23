@@ -25,6 +25,66 @@ fn gen_tracing_debug(_js_name: &str, _parent_js_name: Option<&String>) -> TokenS
   quote! {}
 }
 
+#[cfg(feature = "instrument")]
+fn instrument_call_name(js_name: &str, parent_js_name: Option<&String>) -> String {
+  match parent_js_name {
+    Some(parent) => format!("{parent}.{js_name}"),
+    None => js_name.to_string(),
+  }
+}
+
+/// Guard held for the duration of a synchronous `#[napi(instrument)]` call.
+#[cfg(feature = "instrument")]
+fn gen_instrument_sync_enter(
+  instrument: bool,
+  js_name: &str,
+  parent_js_name: Option<&String>,
+) -> TokenStream {
+  if !instrument {
+    return quote! {};
+  }
+  let name = instrument_call_name(js_name, parent_js_name);
+  quote! {
+    let __napi_instrument_guard = napi::bindgen_prelude::call_instrument::enter_sync(env, #name);
+  }
+}
+
+#[cfg(not(feature = "instrument"))]
+fn gen_instrument_sync_enter(
+  _instrument: bool,
+  _js_name: &str,
+  _parent_js_name: Option<&String>,
+) -> TokenStream {
+  quote! {}
+}
+
+/// Wrap an async `#[napi(instrument)]` future so the call's guard is entered around each poll.
+#[cfg(feature = "instrument")]
+fn gen_instrument_future(
+  instrument: bool,
+  future: TokenStream,
+  js_name: &str,
+  parent_js_name: Option<&String>,
+) -> TokenStream {
+  if !instrument {
+    return future;
+  }
+  let name = instrument_call_name(js_name, parent_js_name);
+  quote! {
+    napi::bindgen_prelude::call_instrument::instrument(env, #name, #future)
+  }
+}
+
+#[cfg(not(feature = "instrument"))]
+fn gen_instrument_future(
+  _instrument: bool,
+  future: TokenStream,
+  _js_name: &str,
+  _parent_js_name: Option<&String>,
+) -> TokenStream {
+  future
+}
+
 impl TryToTokens for NapiFn {
   fn try_to_tokens(&self, tokens: &mut TokenStream) -> BindgenResult<()> {
     let name_str = self.name.to_string();
@@ -256,10 +316,12 @@ impl TryToTokens for NapiFn {
         napi::bindgen_prelude::NativeBorrowScope::new()
       }
     };
+    let otel_sync_enter = gen_instrument_sync_enter(self.instrument, &self.js_name, self.parent_js_name.as_ref());
     let native_call = if !self.is_async {
       if self.within_async_runtime {
         quote! {
           napi::bindgen_prelude::within_runtime_if_available(move || {
+            #otel_sync_enter
             let #receiver_ret_name = {
               #receiver(#(#arg_names),*)
             };
@@ -268,6 +330,7 @@ impl TryToTokens for NapiFn {
         }
       } else {
         quote! {
+          #otel_sync_enter
           let #receiver_ret_name = {
             #receiver(#(#arg_names),*)
           };
@@ -285,8 +348,14 @@ impl TryToTokens for NapiFn {
         };
         quote! { Ok::<#ret_type, napi::Error>(#receiver(#(#arg_names),*).await) }
       };
+      let future = gen_instrument_future(
+        self.instrument,
+        quote! { async move { #call } },
+        &self.js_name,
+        self.parent_js_name.as_ref(),
+      );
       quote! {
-        napi::bindgen_prelude::execute_tokio_future_with_finalize_callback(env, async move { #call }, move |env, #receiver_ret_name| {
+        napi::bindgen_prelude::execute_tokio_future_with_finalize_callback(env, #future, move |env, #receiver_ret_name| {
           #ret
         }, Some(Box::new(move |env| {
           _napi_native_borrow_scope.release(env);

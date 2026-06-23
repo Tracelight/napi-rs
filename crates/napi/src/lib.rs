@@ -114,6 +114,8 @@ mod async_work;
 mod bindgen_runtime;
 #[cfg(feature = "compat-mode")]
 mod call_context;
+#[cfg(feature = "instrument")]
+pub mod call_instrument;
 #[cfg(feature = "napi3")]
 mod cleanup_env;
 mod env;
@@ -192,6 +194,8 @@ macro_rules! assert_type_of {
 pub mod bindgen_prelude {
   #[cfg(all(feature = "compat-mode", not(feature = "noop")))]
   pub use crate::bindgen_runtime::register_module_exports;
+  #[cfg(feature = "instrument")]
+  pub use crate::call_instrument;
   #[cfg(any(feature = "tokio_rt", feature = "async-runtime"))]
   pub use crate::tokio_runtime::*;
   pub use crate::{

@@ -51,6 +51,7 @@ macro_rules! attrgen {
   ($mac:ident) => {
     $mac! {
       (catch_unwind, CatchUnwind(Span)),
+      (instrument, Instrument(Span)),
       (async_runtime, AsyncRuntime(Span)),
       (module_exports, ModuleExports(Span)),
       (js_name, JsName(Span, String, Span)),
